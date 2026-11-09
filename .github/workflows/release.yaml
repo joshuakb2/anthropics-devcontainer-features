@@ -3,7 +3,7 @@ name: "Release Dev Container Features"
 on:
   push:
     branches:
-      - main
+      - fix/enable-auto-update-for-remote-user
   workflow_dispatch:
 
 jobs:
@@ -62,15 +62,15 @@ jobs:
             # Get the current file from the source branch to get its SHA
             file_path=${readme:2}  # Remove leading ./
             echo "Committing updates to $file_path"
-            
+
             # Get current file SHA from the new branch
             file_sha=$(gh api \
               --method GET \
               /repos/$GITHUB_REPOSITORY/contents/$file_path?ref=main \
               -q '.sha')
-            
+
             echo "SHA for $file_path: $file_sha"
-            
+
             # Use GitHub API to commit the file (automatically signed)
             gh api \
               --method PUT \
