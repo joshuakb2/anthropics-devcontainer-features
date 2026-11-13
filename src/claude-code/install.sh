@@ -107,25 +107,27 @@ install_claude_code() {
     npm_prefix="$(npm config get prefix)"
     npm_bin_dir="$(dirname "$(command -v npm)")"
 
-    # User has write permission (e.g., devcontainer images with nvm)
+    # Note: inner PATH must use double quotes so the remote user's shell
+    # expands $PATH; single quotes leave it literal and drop /bin, /usr/bin.
+    # Also, `set -e` is inactive here (called via `||`), so check each step.
     if su "$_REMOTE_USER" -c "test -w '$npm_prefix/lib/node_modules'" 2>/dev/null; then
-        su - "$_REMOTE_USER" -c "PATH='$npm_bin_dir:\$PATH' npm install -g @anthropic-ai/claude-code"
-        return 0
-    fi
+        # User has write permission (e.g., devcontainer images with nvm)
+        su - "$_REMOTE_USER" -c "PATH=\"$npm_bin_dir:\$PATH\" npm install -g @anthropic-ai/claude-code" || return 1
+    else
+        # User lacks write permission (e.g., official node:* images)
+        # Set up user-owned npm global directory
+        user_home="${_REMOTE_USER_HOME:-/home/$_REMOTE_USER}"
+        npm_global="$user_home/.npm-global"
 
-    # User lacks write permission (e.g., official node:* images)
-    # Set up user-owned npm global directory
-    user_home="${_REMOTE_USER_HOME:-/home/$_REMOTE_USER}"
-    npm_global="$user_home/.npm-global"
-
-    su - "$_REMOTE_USER" -c "mkdir -p '$npm_global'"
-    cat > /etc/profile.d/claude-code-npm-global.sh <<EOF
+        su - "$_REMOTE_USER" -c "mkdir -p '$npm_global'" || return 1
+        cat > /etc/profile.d/claude-code-npm-global.sh <<EOF
 export NPM_CONFIG_PREFIX="$npm_global"
 export PATH="$npm_global/bin:\$PATH"
 EOF
 
-    su - "$_REMOTE_USER" -c "PATH='$npm_bin_dir:\$PATH' NPM_CONFIG_PREFIX='$npm_global' npm install -g @anthropic-ai/claude-code"
-    export PATH="$npm_global/bin:$PATH"
+        su - "$_REMOTE_USER" -c "PATH=\"$npm_bin_dir:\$PATH\" NPM_CONFIG_PREFIX='$npm_global' npm install -g @anthropic-ai/claude-code" || return 1
+        export PATH="$npm_global/bin:$PATH"
+    fi
 
     if command -v claude >/dev/null; then
         echo "Claude Code CLI installed successfully!"
